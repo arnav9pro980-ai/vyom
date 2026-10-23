@@ -1,0 +1,430 @@
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local FIREBASE_URL = "https://launcher-c813d-default-rtdb.europe-west1.firebasedatabase.app/gamedata.json"
+
+local MAX_RETRIES = 3
+local CHUNK_SIZE = 350000
+
+local PROPERTY_NAMES = {
+	"Name", "Archivable",
+	"Enabled", "ResetOnSpawn", "IgnoreGuiInset", "DisplayOrder",
+	"ZIndexBehavior", "ScreenInsets", "SafeAreaCompatibility",
+	"AbsoluteSize", "AbsolutePosition",
+	"Position", "Size", "AnchorPoint", "Rotation",
+	"Visible", "ZIndex", "LayoutOrder",
+	"AutomaticSize", "ClipsDescendants",
+	"BackgroundColor3", "BackgroundTransparency",
+	"BorderColor3", "BorderMode", "BorderSizePixel",
+	"Image", "ImageColor3", "ImageTransparency",
+	"ImageRectOffset", "ImageRectSize", "ScaleType",
+	"SliceCenter", "SliceScale", "TileSize",
+	"Text", "TextColor3", "TextTransparency",
+	"TextStrokeColor3", "TextStrokeTransparency",
+	"TextSize", "TextScaled", "TextWrapped",
+	"TextXAlignment", "TextYAlignment",
+	"TextDirection", "TextTruncate", "TextWrap",
+	"Font", "FontFace", "LineHeight",
+	"RichText", "MaxVisibleGraphemes",
+	"PlaceholderText", "PlaceholderColor3",
+	"ClearTextOnFocus", "MultiLine",
+	"CursorPosition", "SelectionStart",
+	"TextEditable", "ShowNativeInput",
+	"CanvasPosition", "CanvasSize",
+	"AutomaticCanvasSize", "ScrollingDirection",
+	"ScrollBarThickness", "ScrollBarImageColor3",
+	"ScrollBarImageTransparency", "VerticalScrollBarPosition",
+	"ElasticBehavior", "HorizontalScrollBarInset",
+	"VerticalScrollBarInset",
+	"FillDirection", "HorizontalAlignment",
+	"VerticalAlignment", "SortOrder",
+	"Padding", "CellPadding", "CellSize",
+	"StartCorner", "Wraps", "AbsoluteContentSize",
+	"AspectRatio", "DominantAxis", "AspectType",
+	"CornerRadius", "Thickness", "Color",
+	"Transparency", "ApplyStrokeMode", "LineJoinMode",
+	"Enabled", "Face", "Offset", "StudsPerTile",
+	"Color3", "Offset", "Rotation",
+	"Transparency", "VertexColor",
+	"Value", "MinValue", "MaxValue",
+	"Increment", "Circular", "CurrentPage",
+	"FillDirectionMaxCells", "PaddingTop",
+	"PaddingBottom", "PaddingLeft", "PaddingRight",
+	"BackgroundColor3", "BorderColor3",
+	"Modal", "Selectable", "Selected",
+	"Active", "Interactable", "Draggable",
+	"AutoButtonColor", "Style",
+	"MouseButton1Click", "ImageRectOffset",
+	"ImageRectSize", "ResampleMode",
+	"SelectionImageObject", "HoverImage",
+	"PressedImage", "HoverImageContent", "ImageContent",
+	"OpenTypeFeatures", "LineHeight",
+	"TextBounds", "TextFits", "ContentText",
+	"PlaceholderText", "ClearTextOnFocus",
+	"PlaybackState", "Looped", "Playing",
+	"Volume", "PlaybackSpeed", "TimePosition",
+	"AnimationId", "SoundId",
+	"CurrentCamera", "Adornee",
+	"AlwaysOnTop", "LightInfluence",
+	"Brightness", "PixelsPerStud",
+	"SizingMode", "ZIndex", "StudsOffset",
+	"ExtentsOffset", "SizeOffset",
+	"MaxDistance", "PlayerToHideFrom",
+	"Enabled", "TargetTextChannel",
+	"DisplayDistanceType", "HealthDisplayType",
+	"NameOcclusion", "Occlusion",
+	"TextColor", "TextStrokeColor",
+	"FontSize", "TextScaled",
+	"AutomaticSize", "BorderSizePixel",
+	"Transparency", "Color3",
+	"PaddingLeft", "PaddingRight",
+	"PaddingTop", "PaddingBottom",
+	"HorizontalAlignment", "VerticalAlignment",
+	"Rotation", "Scale", "Offset",
+	"Thickness", "Color", "Enabled",
+	"Transparency", "ApplyStrokeMode",
+	"LineJoinMode", "CornerRadius",
+	"AspectRatio", "DominantAxis", "AspectType",
+	"ResampleMode", "ImageContent",
+	"ImageRectOffset", "ImageRectSize",
+	"SelectionOrder", "NextSelectionUp",
+	"NextSelectionDown", "NextSelectionLeft",
+	"NextSelectionRight",
+	"RichText", "TextDirection",
+	"TextTruncate", "TextWrap",
+	"MaxVisibleGraphemes", "LineHeight",
+	"TextTransparency", "TextStrokeTransparency",
+	"PlaceholderColor3", "TextEditable",
+	"TextInputType", "InputType",
+	"CursorPosition", "SelectionStart",
+	"MultiLine", "ClearTextOnFocus",
+	"Visible", "Enabled", "Active",
+	"AbsoluteWindowSize", "WindowSize",
+	"MinSize", "MaxSize", "Title",
+	"Button1", "Button2", "Button3",
+	"SelectedObject", "SelectionGroup",
+	"SelectionBehaviorDown", "SelectionBehaviorUp",
+	"SelectionBehaviorLeft", "SelectionBehaviorRight",
+	"LayoutOrder", "Padding", "FillDirection",
+	"HorizontalAlignment", "VerticalAlignment",
+	"SortOrder", "CellPadding", "CellSize",
+	"StartCorner", "FillDirectionMaxCells",
+	"Wraps", "AbsoluteContentSize",
+	"AbsoluteCellCount", "AbsoluteCellSize",
+	"AbsoluteWindowSize", "CanvasPosition",
+	"CanvasSize", "AutomaticCanvasSize",
+	"ScrollingDirection", "ScrollBarThickness",
+	"ScrollBarImageColor3", "ScrollBarImageTransparency",
+	"VerticalScrollBarPosition", "ElasticBehavior",
+	"HorizontalScrollBarInset", "VerticalScrollBarInset",
+	"TopImage", "MidImage", "BottomImage",
+	"ScaleType", "SliceCenter", "SliceScale",
+	"TileSize", "ImageColor3", "ImageTransparency",
+	"ImageRectOffset", "ImageRectSize",
+	"AutoLocalize", "RootLocalizationTable",
+	"LocalizationMatchedSourceText",
+	"LocalizationMatchIdentifier",
+}
+
+local function encodeValue(value, depth)
+	depth = depth or 0
+
+	if depth > 5 then
+		return tostring(value)
+	end
+
+	local valueType = typeof(value)
+
+	if valueType == "nil" then
+		return nil
+	elseif valueType == "string"
+		or valueType == "number"
+		or valueType == "boolean" then
+		return value
+	elseif valueType == "Vector2" then
+		return { type = valueType, X = value.X, Y = value.Y }
+	elseif valueType == "Vector3" then
+		return { type = valueType, X = value.X, Y = value.Y, Z = value.Z }
+	elseif valueType == "UDim" then
+		return { type = valueType, Scale = value.Scale, Offset = value.Offset }
+	elseif valueType == "UDim2" then
+		return {
+			type = valueType,
+			X = { Scale = value.X.Scale, Offset = value.X.Offset },
+			Y = { Scale = value.Y.Scale, Offset = value.Y.Offset }
+		}
+	elseif valueType == "Color3" then
+		return {
+			type = valueType,
+			R = value.R,
+			G = value.G,
+			B = value.B
+		}
+	elseif valueType == "CFrame" then
+		return { type = valueType, Components = { value:GetComponents() } }
+	elseif valueType == "EnumItem" then
+		return {
+			type = valueType,
+			EnumType = tostring(value.EnumType),
+			Name = value.Name,
+			Value = value.Value
+		}
+	elseif valueType == "Rect" then
+		return {
+			type = valueType,
+			Min = encodeValue(value.Min, depth + 1),
+			Max = encodeValue(value.Max, depth + 1)
+		}
+	elseif valueType == "NumberRange" then
+		return { type = valueType, Min = value.Min, Max = value.Max }
+	elseif valueType == "NumberSequence" then
+		local points = {}
+		for _, point in ipairs(value.Keypoints) do
+			table.insert(points, {
+				Time = point.Time,
+				Value = point.Value,
+				Envelope = point.Envelope
+			})
+		end
+		return { type = valueType, Keypoints = points }
+	elseif valueType == "ColorSequence" then
+		local points = {}
+		for _, point in ipairs(value.Keypoints) do
+			table.insert(points, {
+				Time = point.Time,
+				Value = encodeValue(point.Value, depth + 1)
+			})
+		end
+		return { type = valueType, Keypoints = points }
+	elseif valueType == "Instance" then
+		return {
+			type = valueType,
+			Name = value.Name,
+			ClassName = value.ClassName,
+			Path = value:GetFullName()
+		}
+	elseif valueType == "Font" then
+		return {
+			type = valueType,
+			Family = value.Family,
+			Weight = tostring(value.Weight),
+			Style = tostring(value.Style)
+		}
+	elseif valueType == "PhysicalProperties" then
+		return {
+			type = valueType,
+			Density = value.Density,
+			Friction = value.Friction,
+			Elasticity = value.Elasticity,
+			FrictionWeight = value.FrictionWeight,
+			ElasticityWeight = value.ElasticityWeight
+		}
+	end
+
+	return tostring(value)
+end
+
+local function getProperties(instance)
+	local properties = {}
+
+	if typeof(getproperties) == "function" then
+		local success, result = pcall(getproperties, instance)
+
+		if success and type(result) == "table" then
+			for key, value in pairs(result) do
+				local name = type(key) == "string" and key
+					or type(value) == "string" and value
+
+				if name then
+					local ok, propertyValue = pcall(function()
+						return instance[name]
+					end)
+
+					if ok then
+						local encoded = encodeValue(propertyValue)
+						if encoded ~= nil then
+							properties[name] = encoded
+						end
+					end
+				end
+			end
+		end
+	end
+
+	for _, name in ipairs(PROPERTY_NAMES) do
+		if properties[name] == nil then
+			local ok, value = pcall(function()
+				return instance[name]
+			end)
+
+			if ok then
+				local encoded = encodeValue(value)
+				if encoded ~= nil then
+					properties[name] = encoded
+				end
+			end
+		end
+	end
+
+	return properties
+end
+
+local function serialize(instance)
+	local attributes = {}
+
+	for name, value in pairs(instance:GetAttributes()) do
+		attributes[name] = encodeValue(value)
+	end
+
+	local tags = {}
+	pcall(function()
+		tags = instance:GetTags()
+	end)
+
+	local data = {
+		Name = instance.Name,
+		ClassName = instance.ClassName,
+		Properties = getProperties(instance),
+		Attributes = attributes,
+		Tags = tags,
+		Children = {}
+	}
+
+	for _, child in ipairs(instance:GetChildren()) do
+		table.insert(data.Children, serialize(child))
+	end
+
+	return data
+end
+
+local function getRequestFunction()
+	if type(request) == "function" then
+		return request
+	end
+
+	if type(http_request) == "function" then
+		return http_request
+	end
+
+	if type(syn) == "table" and type(syn.request) == "function" then
+		return syn.request
+	end
+
+	if type(fluxus) == "table" and type(fluxus.request) == "function" then
+		return fluxus.request
+	end
+
+	return nil
+end
+
+local httpRequest = getRequestFunction()
+
+if not httpRequest then
+	error("No executor HTTP request function is available. Standard LocalScripts cannot upload HTTP requests directly.")
+end
+
+local function sendJson(url, body)
+	local lastError
+
+	for attempt = 1, MAX_RETRIES do
+		local success, response = pcall(function()
+			return httpRequest({
+				Url = url,
+				Method = "PUT",
+				Headers = {
+					["Content-Type"] = "application/json"
+				},
+				Body = body
+			})
+		end)
+
+		if success and response then
+			local status = response.StatusCode or response.Status or 0
+
+			if status >= 200 and status < 300 then
+				return true
+			end
+
+			lastError = "HTTP status " .. tostring(status)
+		else
+			lastError = tostring(response)
+		end
+
+		task.wait(attempt)
+	end
+
+	return false, lastError
+end
+
+local function splitString(str, size)
+	local chunks = {}
+
+	for startIndex = 1, #str, size do
+		table.insert(chunks, str:sub(startIndex, startIndex + size - 1))
+	end
+
+	return chunks
+end
+
+local exported = {}
+local exportCount = 0
+
+for _, gui in ipairs(playerGui:GetChildren()) do
+	if gui:IsA("LayerCollector") then
+		exportCount += 1
+		exported[gui.Name .. "_" .. exportCount] = serialize(gui)
+	end
+end
+
+local json = HttpService:JSONEncode({
+	ExportedAt = os.time(),
+	PlayerGui = {
+		Name = "PlayerGui",
+		Children = exported
+	}
+})
+
+print("[UI Export] Serialized bytes:", #json)
+
+if #json <= CHUNK_SIZE then
+	local ok, err = sendJson(FIREBASE_URL, json)
+
+	if not ok then
+		error("[UI Export] Upload failed: " .. tostring(err))
+	end
+
+	print("[UI Export] Uploaded to /gamedata")
+else
+	local chunks = splitString(json, CHUNK_SIZE)
+	local manifest = {
+		ExportedAt = os.time(),
+		ChunkCount = #chunks,
+		TotalBytes = #json
+	}
+
+	local baseURL = "https://launcher-c813d-default-rtdb.europe-west1.firebasedatabase.app/gamedata"
+
+	for index, chunk in ipairs(chunks) do
+		local chunkURL = baseURL .. "/chunks/" .. index .. ".json"
+		local ok, err = sendJson(chunkURL, HttpService:JSONEncode(chunk))
+
+		if not ok then
+			error("[UI Export] Chunk " .. index .. " failed: " .. tostring(err))
+		end
+
+		print("[UI Export] Uploaded chunk " .. index .. "/" .. #chunks)
+		task.wait(0.1)
+	end
+
+	local ok, err = sendJson(baseURL .. "/manifest.json", HttpService:JSONEncode(manifest))
+
+	if not ok then
+		error("[UI Export] Manifest upload failed: " .. tostring(err))
+	end
+
+	print("[UI Export] Complete. Chunks:", #chunks)
+end
